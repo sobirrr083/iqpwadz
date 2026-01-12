@@ -1,513 +1,605 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Copy, Download, Trash2, Moon, Sun, FileText, Check, Globe, ArrowLeft, ArrowRight, RefreshCw, X, Minimize2, Search, Menu } from 'lucide-react';
-
-export default function BrowserTextCopier() {
-  const [text, setText] = useState('');
-  const [darkMode, setDarkMode] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [selecting, setSelecting] = useState(false);
-  const [showBrowser, setShowBrowser] = useState(false);
-  const [browserUrl, setBrowserUrl] = useState('https://www.google.com');
-  const [urlInput, setUrlInput] = useState('https://www.google.com');
-  const [browserMinimized, setBrowserMinimized] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
-  
-  const textareaRef = useRef(null);
-  const pressTimerRef = useRef(null);
-  const iframeRef = useRef(null);
-
-  const charCount = text.length;
-  const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
-
-  const quickLinks = [
-    { name: 'Google', url: 'https://www.google.com', icon: '🔍' },
-    { name: 'ChatGPT', url: 'https://chat.openai.com', icon: '🤖' },
-    { name: 'Claude', url: 'https://claude.ai', icon: '🧠' },
-    { name: 'Grok', url: 'https://x.ai', icon: '✨' },
-    { name: 'YouTube', url: 'https://www.youtube.com', icon: '📺' },
-    { name: 'Wikipedia', url: 'https://www.wikipedia.org', icon: '📚' }
-  ];
-
-  const startPress = () => {
-    setSelecting(true);
-    pressTimerRef.current = setTimeout(() => {
-      selectBetweenWords();
-      setSelecting(false);
-    }, 3000);
-  };
-
-  const cancelPress = () => {
-    if (pressTimerRef.current) {
-      clearTimeout(pressTimerRef.current);
-      setSelecting(false);
-    }
-  };
-
-  const selectBetweenWords = () => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-
-    if (start === end) {
-      alert("❌ Ikkita so'zni tanlang (bosib turing)!");
-      return;
-    }
-
-    const selected = text.substring(start, end).trim().split(/\s+/);
-
-    if (selected.length < 2) {
-      alert("❌ Kamida 2 ta so'z tanlang!");
-      return;
-    }
-
-    const firstWord = selected[0];
-    const lastWord = selected[selected.length - 1];
-
-    const startIndex = text.indexOf(firstWord, 0);
-    const endIndex = text.lastIndexOf(lastWord) + lastWord.length;
-
-    if (startIndex === -1 || endIndex === -1) {
-      alert("❌ So'zlar topilmadi!");
-      return;
-    }
-
-    textarea.focus();
-    textarea.setSelectionRange(startIndex, endIndex);
-    alert("✅ So'zlar orasidagi barcha matn belgilandi!");
-  };
-
-  const copyAll = () => {
-    if (!text.trim()) {
-      alert("❌ Matn yo'q!");
-      return;
-    }
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Text Copier Pro - Browser</title>
     
-    const textarea = textareaRef.current;
-    textarea.select();
-    document.execCommand('copy');
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const saveTxt = (onlySelected = false) => {
-    const textarea = textareaRef.current;
-    let textToSave = text;
-
-    if (onlySelected) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      
-      if (start === end) {
-        alert("❌ Matn belgilanmagan! Barcha matn saqlanadi.");
-      } else {
-        textToSave = text.substring(start, end);
-      }
-    }
-
-    if (!textToSave.trim()) {
-      alert("❌ Saqlanadigan matn yo'q!");
-      return;
-    }
-
-    const now = new Date();
-    const site = window.location.hostname.replace(/\./g, '_') || 'text-copier';
-    const date = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-    const time = `${String(now.getHours()).padStart(2,'0')}-${String(now.getMinutes()).padStart(2,'0')}-${String(now.getSeconds()).padStart(2,'0')}`;
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.1/font/bootstrap-icons.min.css" rel="stylesheet">
     
-    const defaultName = `${site}_${date}_${time}.txt`;
-    const filename = prompt("📝 Fayl nomini kiriting:", defaultName);
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: background-color 0.3s, color 0.3s;
+            overflow-x: hidden;
+        }
+        
+        body.light-mode {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #212529;
+        }
+        
+        body.dark-mode {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #f8f9fa;
+        }
+        
+        .app-container {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+        }
+        
+        .text-copier-panel {
+            width: 100%;
+            height: 100vh;
+            overflow-y: auto;
+            transition: all 0.3s;
+            padding: 20px;
+        }
+        
+        .text-copier-panel.with-browser {
+            width: 40%;
+        }
+        
+        .browser-panel {
+            width: 0;
+            height: 100vh;
+            overflow: hidden;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+        
+        .browser-panel.active {
+            width: 60%;
+        }
+        
+        .dark-mode .browser-panel {
+            background: #1a1a2e;
+        }
+        
+        .card {
+            backdrop-filter: blur(10px);
+            border: none;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        .light-mode .card {
+            background: rgba(255, 255, 255, 0.95);
+        }
+        
+        .dark-mode .card {
+            background: rgba(30, 30, 46, 0.95);
+        }
+        
+        .header-icon {
+            font-size: 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .dark-mode .header-icon {
+            background: linear-gradient(135deg, #667eea 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        #textArea {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            min-height: 300px;
+            resize: vertical;
+        }
+        
+        .text-copier-panel.with-browser #textArea {
+            min-height: 200px;
+        }
+        
+        .btn-browser {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            font-size: 1rem;
+            transition: transform 0.2s;
+        }
+        
+        .btn-browser:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .quick-link {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .quick-link:hover {
+            transform: translateY(-2px);
+        }
+        
+        .browser-toolbar {
+            padding: 8px;
+            border-bottom: 1px solid #dee2e6;
+            background: #f8f9fa;
+        }
+        
+        .dark-mode .browser-toolbar {
+            border-bottom-color: #495057;
+            background: #16213e;
+        }
+        
+        .browser-content {
+            flex: 1;
+            width: 100%;
+            border: none;
+            background: white;
+        }
+        
+        .dark-mode .browser-content {
+            background: #1a1a2e;
+        }
+        
+        .webview-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        .url-bar {
+            flex: 1;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+        
+        .selecting-indicator {
+            height: 3px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            animation: loading 1.5s infinite;
+        }
+        
+        @keyframes loading {
+            0% { width: 0%; }
+            50% { width: 100%; }
+            100% { width: 0%; }
+        }
+        
+        .stat-badge {
+            font-size: 0.8rem;
+            padding: 4px 10px;
+        }
+        
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 0.85rem;
+        }
+        
+        @media (max-width: 768px) {
+            .text-copier-panel.with-browser {
+                width: 100%;
+                height: 50vh;
+            }
+            
+            .browser-panel.active {
+                width: 100%;
+                height: 50vh;
+            }
+            
+            .app-container {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body class="light-mode">
 
-    if (!filename) return;
+    <div class="app-container">
+        <!-- Text Copier Panel -->
+        <div class="text-copier-panel" id="textCopierPanel">
+            <div class="container-fluid">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-file-text header-icon"></i>
+                        <h1 class="h4 mb-0 fw-bold">AI Text Copier</h1>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-primary btn-sm" id="menuBtn" data-bs-toggle="collapse" data-bs-target="#quickLinksMenu">
+                            <i class="bi bi-list"></i>
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" id="themeToggle">
+                            <i class="bi bi-moon-fill"></i>
+                        </button>
+                    </div>
+                </div>
 
-    const blob = new Blob([textToSave], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename.endsWith('.txt') ? filename : filename + '.txt';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const clearText = () => {
-    if (confirm("🗑️ Barcha matn o'chirilsinmi?")) {
-      setText('');
-    }
-  };
-
-  const openBrowser = (url = null) => {
-    if (url) {
-      setBrowserUrl(url);
-      setUrlInput(url);
-    }
-    setShowBrowser(true);
-    setBrowserMinimized(false);
-  };
-
-  const closeBrowser = () => {
-    setShowBrowser(false);
-    setBrowserMinimized(false);
-  };
-
-  const minimizeBrowser = () => {
-    setBrowserMinimized(true);
-  };
-
-  const handleUrlSubmit = () => {
-    let url = urlInput.trim();
-    
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      if (url.includes('.')) {
-        url = 'https://' + url;
-      } else {
-        url = 'https://www.google.com/search?q=' + encodeURIComponent(url);
-      }
-    }
-    
-    setBrowserUrl(url);
-    setUrlInput(url);
-  };
-
-  const handleUrlKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleUrlSubmit();
-    }
-  };
-
-  const refreshBrowser = () => {
-    if (iframeRef.current) {
-      const currentSrc = iframeRef.current.src;
-      iframeRef.current.src = '';
-      setTimeout(() => {
-        iframeRef.current.src = currentSrc;
-      }, 10);
-    }
-  };
-
-  const goBack = () => {
-    if (iframeRef.current && iframeRef.current.contentWindow) {
-      try {
-        iframeRef.current.contentWindow.history.back();
-      } catch (e) {
-        console.log('Cannot go back');
-      }
-    }
-  };
-
-  const goForward = () => {
-    if (iframeRef.current && iframeRef.current.contentWindow) {
-      try {
-        iframeRef.current.contentWindow.history.forward();
-      } catch (e) {
-        console.log('Cannot go forward');
-      }
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (pressTimerRef.current) {
-        clearTimeout(pressTimerRef.current);
-      }
-    };
-  }, []);
-
-  const bgColor = darkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 to-indigo-100';
-  const cardBg = darkMode ? 'bg-gray-800' : 'bg-white';
-  const textColor = darkMode ? 'text-gray-100' : 'text-gray-800';
-  const borderColor = darkMode ? 'border-gray-700' : 'border-gray-200';
-
-  return (
-    <div className={`min-h-screen ${bgColor} ${textColor} transition-colors duration-300`}>
-      {/* Main Content */}
-      <div className={`${showBrowser && !browserMinimized ? 'hidden' : 'block'} p-4`}>
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <FileText className={`w-8 h-8 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-              <h1 className="text-2xl font-bold">AI Text Copier Pro</h1>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowMenu(!showMenu)}
-                className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-100'} transition-colors`}
-              >
-                <Menu className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-100'} transition-colors`}
-              >
-                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
-            </div>
-          </div>
-
-          {/* Browser Button */}
-          <button
-            onClick={() => openBrowser()}
-            className={`w-full mb-4 flex items-center justify-center gap-2 py-4 px-6 rounded-lg font-medium transition-all ${
-              darkMode 
-                ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700' 
-                : 'bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600'
-            } text-white shadow-lg`}
-          >
-            <Globe className="w-6 h-6" />
-            <span className="text-lg">🌐 Brauzer ochish</span>
-          </button>
-
-          {/* Quick Links Menu */}
-          {showMenu && (
-            <div className={`${cardBg} rounded-lg p-4 mb-4 shadow-lg border ${borderColor}`}>
-              <h3 className="font-semibold mb-3">🔗 Tezkor havolalar:</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {quickLinks.map((link) => (
-                  <button
-                    key={link.url}
-                    onClick={() => openBrowser(link.url)}
-                    className={`flex items-center gap-2 p-3 rounded-lg transition-all ${
-                      darkMode 
-                        ? 'bg-gray-700 hover:bg-gray-600' 
-                        : 'bg-gray-100 hover:bg-gray-200'
-                    }`}
-                  >
-                    <span className="text-xl">{link.icon}</span>
-                    <span className="text-sm font-medium">{link.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Info Card */}
-          <div className={`${cardBg} rounded-lg p-4 mb-4 shadow-sm border ${borderColor}`}>
-            <p className="text-sm opacity-75 mb-2">
-              💡 <strong>Maslahat:</strong> Brauzerda ChatGPT/Claude ga kiring, matnni nusxa oling va bu yerga paste qiling!
-            </p>
-            <div className="flex gap-4 text-sm">
-              <span>📊 Belgilar: <strong>{charCount}</strong></span>
-              <span>📝 So'zlar: <strong>{wordCount}</strong></span>
-            </div>
-          </div>
-
-          {/* Text Area */}
-          <div className={`${cardBg} rounded-lg shadow-lg border ${borderColor} overflow-hidden relative`}>
-            {selecting && (
-              <div className="absolute top-0 left-0 right-0 bg-blue-500 h-1 animate-pulse"></div>
-            )}
-            <textarea
-              ref={textareaRef}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onMouseDown={startPress}
-              onMouseUp={cancelPress}
-              onMouseLeave={cancelPress}
-              onTouchStart={startPress}
-              onTouchEnd={cancelPress}
-              placeholder="Bu yerga brauzerdan yoki AI'dan matn paste qiling...
-
-💡 Funksiyalar:
-• Paste va Edit
-• Copy All
-• Save .TXT
-• Ikki so'z orasini belgilash (3 soniya bosib turing)"
-              className={`w-full h-96 p-4 focus:outline-none resize-none ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-800'} transition-colors`}
-              style={{ fontFamily: 'monospace', fontSize: '15px', lineHeight: '1.6' }}
-            />
-          </div>
-
-          {/* Action Buttons */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-            <button
-              onClick={copyAll}
-              className={`flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
-                copied 
-                  ? 'bg-green-500 text-white' 
-                  : darkMode 
-                    ? 'bg-green-600 hover:bg-green-700 text-white' 
-                    : 'bg-green-500 hover:bg-green-600 text-white'
-              }`}
-            >
-              {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-              {copied ? 'Nusxa olindi!' : 'Copy All'}
-            </button>
-
-            <button
-              onClick={() => saveTxt(false)}
-              className={`flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
-                darkMode 
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                  : 'bg-blue-500 hover:bg-blue-600 text-white'
-              }`}
-            >
-              <Download className="w-5 h-5" />
-              Save All
-            </button>
-
-            <button
-              onClick={() => saveTxt(true)}
-              className={`flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
-                darkMode 
-                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white' 
-                  : 'bg-indigo-500 hover:bg-indigo-600 text-white'
-              }`}
-            >
-              <Download className="w-5 h-5" />
-              Save Selected
-            </button>
-
-            <button
-              onClick={clearText}
-              className={`flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
-                darkMode 
-                  ? 'bg-red-600 hover:bg-red-700 text-white' 
-                  : 'bg-red-500 hover:bg-red-600 text-white'
-              }`}
-            >
-              <Trash2 className="w-5 h-5" />
-              Clear
-            </button>
-          </div>
-
-          {/* Footer Info */}
-          <div className={`mt-6 p-4 ${cardBg} rounded-lg border ${borderColor} shadow-sm`}>
-            <h3 className="font-semibold mb-2">🚀 Qanday foydalanish:</h3>
-            <ol className="text-sm space-y-1 opacity-75 list-decimal list-inside">
-              <li><strong>Brauzer ochish</strong> - ChatGPT, Claude, Grok va boshqa saytlarga kiring</li>
-              <li>AI javobini nusxa oling (Ctrl+C yoki Copy)</li>
-              <li>Bu yerga qaytib paste qiling (Ctrl+V)</li>
-              <li>Xohlagancha edit qiling</li>
-              <li><strong>Copy All</strong> - to'liq nusxa olish</li>
-              <li><strong>Save All/Selected</strong> - .txt faylga saqlash</li>
-              <li><strong>3 soniya bosish</strong> - ikki so'z orasidagi matnni tanlash</li>
-            </ol>
-          </div>
-        </div>
-      </div>
-
-      {/* Browser Minimized Button */}
-      {browserMinimized && (
-        <div className="fixed bottom-4 right-4 z-50">
-          <button
-            onClick={() => setBrowserMinimized(false)}
-            className={`flex items-center gap-2 px-6 py-3 rounded-full shadow-2xl font-medium transition-all animate-pulse ${
-              darkMode 
-                ? 'bg-purple-600 hover:bg-purple-700' 
-                : 'bg-purple-500 hover:bg-purple-600'
-            } text-white`}
-          >
-            <Globe className="w-5 h-5" />
-            Brauzer ochish
-          </button>
-        </div>
-      )}
-
-      {/* Browser View */}
-      {showBrowser && !browserMinimized && (
-        <div className="fixed inset-0 z-40 flex flex-col bg-white dark:bg-gray-900">
-          {/* Browser Controls */}
-          <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b p-2`}>
-            <div className="flex items-center gap-2 mb-2">
-              <button
-                onClick={goBack}
-                className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
-                title="Orqaga"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <button
-                onClick={goForward}
-                className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
-                title="Oldinga"
-              >
-                <ArrowRight className="w-5 h-5" />
-              </button>
-              <button
-                onClick={refreshBrowser}
-                className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
-                title="Yangilash"
-              >
-                <RefreshCw className="w-5 h-5" />
-              </button>
-              
-              <div className="flex-1 flex gap-2">
-                <input
-                  type="text"
-                  value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  onKeyPress={handleUrlKeyPress}
-                  className={`flex-1 px-4 py-2 rounded-full border ${
-                    darkMode 
-                      ? 'bg-gray-700 border-gray-600 text-white' 
-                      : 'bg-gray-100 border-gray-300'
-                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  placeholder="URL yoki qidiruv..."
-                />
-                <button
-                  onClick={handleUrlSubmit}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
-                >
-                  <Search className="w-5 h-5" />
+                <button class="btn btn-browser w-100 mb-3 shadow" onclick="toggleBrowser()">
+                    <i class="bi bi-globe me-2"></i>
+                    <span id="browserBtnText">Brauzer ochish</span>
                 </button>
-              </div>
 
-              <button
-                onClick={minimizeBrowser}
-                className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
-                title="Yashirish"
-              >
-                <Minimize2 className="w-5 h-5" />
-              </button>
-              <button
-                onClick={closeBrowser}
-                className={`p-2 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-600 transition-colors`}
-                title="Yopish"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+                <div class="collapse mb-3" id="quickLinksMenu">
+                    <div class="card">
+                        <div class="card-body p-2">
+                            <h6 class="card-title mb-2">Tezkor havolalar:</h6>
+                            <div class="row g-2">
+                                <div class="col-6 col-md-4">
+                                    <div class="quick-link card p-2 text-center" onclick="openUrl('https://www.google.com')">
+                                        <div class="small fw-bold">Google</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-4">
+                                    <div class="quick-link card p-2 text-center" onclick="openUrl('https://chat.openai.com')">
+                                        <div class="small fw-bold">ChatGPT</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-4">
+                                    <div class="quick-link card p-2 text-center" onclick="openUrl('https://claude.ai')">
+                                        <div class="small fw-bold">Claude</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-4">
+                                    <div class="quick-link card p-2 text-center" onclick="openUrl('https://x.ai')">
+                                        <div class="small fw-bold">Grok</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-4">
+                                    <div class="quick-link card p-2 text-center" onclick="openUrl('https://www.youtube.com')">
+                                        <div class="small fw-bold">YouTube</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-4">
+                                    <div class="quick-link card p-2 text-center" onclick="openUrl('https://www.wikipedia.org')">
+                                        <div class="small fw-bold">Wikipedia</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-            {/* Quick Links Bar */}
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {quickLinks.map((link) => (
-                <button
-                  key={link.url}
-                  onClick={() => {
-                    setBrowserUrl(link.url);
-                    setUrlInput(link.url);
-                  }}
-                  className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm whitespace-nowrap transition-all ${
-                    darkMode 
-                      ? 'bg-gray-700 hover:bg-gray-600' 
-                      : 'bg-gray-100 hover:bg-gray-200'
-                  }`}
-                >
-                  <span>{link.icon}</span>
-                  <span>{link.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+                <div class="card mb-3">
+                    <div class="card-body p-2">
+                        <p class="mb-1 small">
+                            Maslahat: Brauzerda matn nusxa oling va bu yerga paste qiling!
+                        </p>
+                        <div class="d-flex gap-3">
+                            <span class="badge stat-badge bg-primary">
+                                Belgilar: <strong id="charCount">0</strong>
+                            </span>
+                            <span class="badge stat-badge bg-success">
+                                Sozlar: <strong id="wordCount">0</strong>
+                            </span>
+                        </div>
+                    </div>
+                </div>
 
-          {/* Browser Content */}
-          <div className="flex-1 relative bg-white">
-            <iframe
-              ref={iframeRef}
-              src={browserUrl}
-              className="w-full h-full border-0"
-              title="Browser"
-              sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals allow-top-navigation"
-            />
-            <div className="absolute bottom-4 right-4 z-10">
-              <div className={`${cardBg} rounded-lg shadow-lg p-3 border ${borderColor} text-xs opacity-90`}>
-                💡 Matnni nusxa oling (Ctrl+C) va Text Copier'ga o'ting
-              </div>
+                <div class="card mb-3">
+                    <div id="selectingIndicator" class="selecting-indicator" style="display: none;"></div>
+                    <div class="card-body p-0">
+                        <textarea class="form-control border-0" id="textArea" placeholder="Bu yerga matn paste qiling..."></textarea>
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6 col-md-3">
+                        <button class="btn btn-success w-100 py-2" id="copyBtn" onclick="copyAll()">
+                            <i class="bi bi-clipboard-check me-1"></i>
+                            <span id="copyBtnText">Copy</span>
+                        </button>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <button class="btn btn-primary w-100 py-2" onclick="saveTxt(false)">
+                            <i class="bi bi-download me-1"></i>
+                            Save All
+                        </button>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <button class="btn btn-info w-100 py-2" onclick="saveTxt(true)">
+                            <i class="bi bi-save me-1"></i>
+                            Selected
+                        </button>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <button class="btn btn-danger w-100 py-2" onclick="clearText()">
+                            <i class="bi bi-trash me-1"></i>
+                            Clear
+                        </button>
+                    </div>
+                </div>
             </div>
-          </div>
         </div>
-      )}
+
+        <!-- Browser Panel -->
+        <div class="browser-panel" id="browserPanel">
+            <div class="browser-toolbar">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="browserBack()">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="browserForward()">
+                        <i class="bi bi-arrow-right"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="browserRefresh()">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    
+                    <input type="text" class="url-bar form-control form-control-sm" id="urlInput" placeholder="URL..." value="https://www.google.com">
+                    
+                    <button class="btn btn-sm btn-primary" onclick="navigateUrl()">
+                        <i class="bi bi-search"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="toggleBrowser()">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                
+                <div class="d-flex gap-2 overflow-auto">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navigateToUrl('https://www.google.com')">Google</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navigateToUrl('https://chat.openai.com')">ChatGPT</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navigateToUrl('https://claude.ai')">Claude</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navigateToUrl('https://x.ai')">Grok</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navigateToUrl('https://www.youtube.com')">YouTube</button>
+                </div>
+            </div>
+            
+            <div class="browser-content">
+                <iframe id="browserFrame" class="webview-frame" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals allow-top-navigation"></iframe>
+            </div>
+        </div>
     </div>
-  );
-}
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        var pressTimer = null;
+        var currentUrl = 'https://www.google.com';
+        var browserOpen = false;
+        
+        var textArea = document.getElementById('textArea');
+        var browserPanel = document.getElementById('browserPanel');
+        var textCopierPanel = document.getElementById('textCopierPanel');
+        var browserFrame = document.getElementById('browserFrame');
+        var urlInput = document.getElementById('urlInput');
+        var selectingIndicator = document.getElementById('selectingIndicator');
+        var browserBtnText = document.getElementById('browserBtnText');
+        
+        document.getElementById('themeToggle').addEventListener('click', function() {
+            var body = document.body;
+            var icon = this.querySelector('i');
+            
+            if (body.classList.contains('light-mode')) {
+                body.classList.remove('light-mode');
+                body.classList.add('dark-mode');
+                icon.classList.remove('bi-moon-fill');
+                icon.classList.add('bi-sun-fill');
+            } else {
+                body.classList.remove('dark-mode');
+                body.classList.add('light-mode');
+                icon.classList.remove('bi-sun-fill');
+                icon.classList.add('bi-moon-fill');
+            }
+        });
+        
+        textArea.addEventListener('input', updateStats);
+        textArea.addEventListener('mousedown', startPress);
+        textArea.addEventListener('mouseup', cancelPress);
+        textArea.addEventListener('mouseleave', cancelPress);
+        textArea.addEventListener('touchstart', startPress);
+        textArea.addEventListener('touchend', cancelPress);
+        
+        urlInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                navigateUrl();
+            }
+        });
+        
+        function updateStats() {
+            var text = textArea.value;
+            var charCount = text.length;
+            var wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+            
+            document.getElementById('charCount').textContent = charCount;
+            document.getElementById('wordCount').textContent = wordCount;
+        }
+        
+        function startPress() {
+            selectingIndicator.style.display = 'block';
+            pressTimer = setTimeout(function() {
+                selectBetweenWords();
+                selectingIndicator.style.display = 'none';
+            }, 3000);
+        }
+        
+        function cancelPress() {
+            if (pressTimer) {
+                clearTimeout(pressTimer);
+                selectingIndicator.style.display = 'none';
+            }
+        }
+        
+        function selectBetweenWords() {
+            var start = textArea.selectionStart;
+            var end = textArea.selectionEnd;
+            var text = textArea.value;
+            
+            if (start === end) {
+                alert("Ikkita sozni tanlang!");
+                return;
+            }
+            
+            var selected = text.substring(start, end).trim().split(/\s+/);
+            
+            if (selected.length < 2) {
+                alert("Kamida 2 ta soz tanlang!");
+                return;
+            }
+            
+            var firstWord = selected[0];
+            var lastWord = selected[selected.length - 1];
+            
+            var startIndex = text.indexOf(firstWord, 0);
+            var endIndex = text.lastIndexOf(lastWord) + lastWord.length;
+            
+            if (startIndex === -1 || endIndex === -1) {
+                alert("Sozlar topilmadi!");
+                return;
+            }
+            
+            textArea.focus();
+            textArea.setSelectionRange(startIndex, endIndex);
+            alert("Sozlar orasidagi matn belgilandi!");
+        }
+        
+        function copyAll() {
+            if (!textArea.value.trim()) {
+                alert("Matn yoq!");
+                return;
+            }
+            
+            textArea.select();
+            document.execCommand('copy');
+            
+            var btnText = document.getElementById('copyBtnText');
+            btnText.textContent = 'Copied!';
+            
+            setTimeout(function() {
+                btnText.textContent = 'Copy';
+            }, 2000);
+        }
+        
+        function saveTxt(onlySelected) {
+            var textToSave = textArea.value;
+            
+            if (onlySelected) {
+                var start = textArea.selectionStart;
+                var end = textArea.selectionEnd;
+                
+                if (start === end) {
+                    alert("Matn belgilanmagan!");
+                } else {
+                    textToSave = textArea.value.substring(start, end);
+                }
+            }
+            
+            if (!textToSave.trim()) {
+                alert("Saqlanadigan matn yoq!");
+                return;
+            }
+            
+            var now = new Date();
+            var site = window.location.hostname.replace(/\./g, '_') || 'text-copier';
+            var month = now.getMonth() + 1;
+            var monthStr = month < 10 ? '0' + month : '' + month;
+            var day = now.getDate();
+            var dayStr = day < 10 ? '0' + day : '' + day;
+            var hours = now.getHours();
+            var hoursStr = hours < 10 ? '0' + hours : '' + hours;
+            var minutes = now.getMinutes();
+            var minutesStr = minutes < 10 ? '0' + minutes : '' + minutes;
+            var seconds = now.getSeconds();
+            var secondsStr = seconds < 10 ? '0' + seconds : '' + seconds;
+            
+            var date = now.getFullYear() + '-' + monthStr + '-' + dayStr;
+            var time = hoursStr + '-' + minutesStr + '-' + secondsStr;
+            
+            var defaultName = site + '_' + date + '_' + time + '.txt';
+            var filename = prompt("Fayl nomi:", defaultName);
+            
+            if (!filename) return;
+            
+            var blob = new Blob([textToSave], { type: 'text/plain;charset=utf-8' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = filename.indexOf('.txt') !== -1 ? filename : filename + '.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        function clearText() {
+            if (confirm("Barcha matn ochirilsinmi?")) {
+                textArea.value = '';
+                updateStats();
+            }
+        }
+        
+        function toggleBrowser() {
+            browserOpen = !browserOpen;
+            
+            if (browserOpen) {
+                browserPanel.classList.add('active');
+                textCopierPanel.classList.add('with-browser');
+                browserBtnText.textContent = 'Brauzer yopish';
+                if (!browserFrame.src) {
+                    browserFrame.src = currentUrl;
+                }
+            } else {
+                browserPanel.classList.remove('active');
+                textCopierPanel.classList.remove('with-browser');
+                browserBtnText.textContent = 'Brauzer ochish';
+            }
+        }
+        
+        function openUrl(url) {
+            currentUrl = url;
+            urlInput.value = url;
+            browserFrame.src = url;
+            if (!browserOpen) {
+                toggleBrowser();
+            }
+        }
+        
+        function navigateUrl() {
+            var url = urlInput.value.trim();
+            
+            if (url.indexOf('http://') !== 0 && url.indexOf('https://') !== 0) {
+                if (url.indexOf('.') !== -1) {
+                    url = 'https://' + url;
+                } else {
+                    url = 'https://www.google.com/search?q=' + encodeURIComponent(url);
+                }
+            }
+            
+            currentUrl = url;
+            urlInput.value = url;
+            browserFrame.src = url;
+        }
+        
+        function navigateToUrl(url) {
+            currentUrl = url;
+            urlInput.value = url;
+            browserFrame.src = url;
+        }
+        
+        function browserBack() {
+            try {
+                browserFrame.contentWindow.history.back();
+            } catch (e) {
+                console.log('Cannot go back');
+            }
+        }
+        
+        function browserForward() {
+            try {
+                browserFrame.contentWindow.history.forward();
+            } catch (e) {
+                console.log('Cannot go forward');
+            }
+        }
+        
+        function browserRefresh() {
+            browserFrame.src = currentUrl;
+        }
+        
+        updateStats();
+    </script>
+</body>
+</html>
